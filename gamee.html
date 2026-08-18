@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Miner Cat HD</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #0d0e15;
+      color: #fff;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+    #game-container {
+      position: relative;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+      border-radius: 12px;
+      overflow: hidden;
+      border: 3px solid #2a2d3d;
+    }
+    canvas { display: block; background: #181922; }
+    .controls-hint {
+      margin-top: 12px;
+      color: #a0a5c0;
+      font-size: 14px;
+      text-align: center;
+    }
+  </style>
+</head>
+<body>
+
+<div id="game-container">
+  <canvas id="canvas" width="480" height="640"></canvas>
+</div>
+<div class="controls-hint">Gunakan Tombol Panah **[Kiri / Kanan / Bawah]** atau **[A / D / S]** untuk Menggali</div>
+
+<script>
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+
+const COLS = 8;
+const ROWS = 10;
+const TILE_SIZE = canvas.width / COLS;
+
+let state = {
+  score: 0,
+  energy: 100,
+  depth: 0,
+  gameOver: false,
+  cat: { x: 3, y: 1, animFrame: 0, facing: 1 },
+  grid: [],
+  particles: []
+};
+
+// Jenis Blok
+const BLOCK = {
+  EMPTY: 0,
+  DIRT: 1,
+  GEM_RUBY: 2,
+  GEM_EMERALD: 3,
+  GEM_DIAMOND: 4,
+  ROCK: 5
+};
+
+function initGrid() {
+  state.grid = [];
+  for (let r = 0; r < ROWS + 20; r++) {
+    let row = [];
+    for (let c = 0; c < COLS; c++) {
+      if (r < 2) {
+        row.push(BLOCK.EMPTY);
+      } else {
+        let rand = Math.random();
+        if (rand < 0.15) row.push(BLOCK.GEM_RUBY);
+        else if (rand < 0.23) row.push(BLOCK.GEM_EMERALD);
+        else if (rand < 0.28) row.push(BLOCK.GEM_DIAMOND);
+        else if (rand < 0.40) row.push(BLOCK.ROCK);
+        else row.push(BLOCK.DIRT);
+      }
+    }
+    state.grid.push(row);
+  }
+}
+
+function resetGame() {
+  state = {
+    score: 0,
+    energy: 100,
+    depth: 0,
+    gameOver: false,
+    cat: { x: 3, y: 1, animFrame: 0, facing: 1 },
+    grid: [],
+    particles: []
+  };
+  initGrid();
+}
+
+// Particle Effect
+function addParticles(x, y, color) {
+  for (let i = 0; i < 8; i++) {
+    state.particles.push({
+      x: x * TILE_SIZE + TILE_SIZE / 2,
+      y: y * TILE_SIZE + TILE_SIZE / 2,
+      vx: (Math.random() - 0.5) * 6,
+      vy: (Math.random() - 0.5) * 6,
+      size: Math.random() * 6 + 2,
+      color: color,
+      life: 1
+    });
+  }
+}
+
+// Input Handling
+window.addEventListener('keydown', (e) => {
+  if (state.gameOver) {
+    if (e.code === 'Space' || e.code === 'KeyR') resetGame();
+    return;
+  }
+  let targetX = state.cat.x;
+  let targetY = state.cat.y;
+
+  if (e.key === 'ArrowLeft' || e.key === 'a') { targetX--; state.cat.facing = -1; }
+  else if (e.key === 'ArrowRight' || e.key === 'd') { targetX++; state.cat.facing = 1; }
+  else if (e.key === 'ArrowDown' || e.key === 's') { targetY++; }
+  else return;
+
+  if (targetX >= 0 && targetX < COLS && targetY >= 1) {
+    let block = state.grid[targetY][targetX];
+    if (block !== BLOCK.ROCK) {
+      if (block === BLOCK.DIRT) {
+        addParticles(targetX, targetY, '#8b5a2b');
+        state.energy -= 2;
+      } else if (block === BLOCK.GEM_RUBY) {
+        addParticles(targetX, targetY, '#ff2a6d');
+        state.score += 50;
+        state.energy = Math.min(100, state.energy + 10);
+      } else if (block === BLOCK.GEM_EMERALD) {
+        addParticles(targetX, targetY, '#05ffa1');
+        state.score += 100;
+        state.energy = Math.min(100, state.energy + 15);
+      } else if (block === BLOCK.GEM_DIAMOND) {
+        addParticles(targetX, targetY, '#00f0ff');
+        state.score += 250;
+        state.energy = Math.min(100, state.energy + 25);
+      }
+
+      state.grid[targetY][targetX] = BLOCK.EMPTY;
+      state.cat.x = targetX;
+      state.cat.y = targetY;
+      state.depth = Math.max(state.depth, targetY - 1);
+
+      // Tambah baris baru jika menggali sangat dalam
+      if (targetY + 5 >= state.grid.length) {
+        for (let i = 0; i < 10; i++) {
+          let row = [];
+          for (let c = 0; c < COLS; c++) {
+            let rand = Math.random();
+            if (rand < 0.15) row.push(BLOCK.GEM_RUBY);
+            else if (rand < 0.22) row.push(BLOCK.GEM_EMERALD);
+            else if (rand < 0.28) row.push(BLOCK.GEM_DIAMOND);
+            else if (rand < 0.42) row.push(BLOCK.ROCK);
+            else row.push(BLOCK.DIRT);
+          }
+          state.grid.push(row);
+        }
+      }
+    }
+  }
+});
+
+// Render Functions
+function drawCat(x, y) {
+  ctx.save();
+  ctx.translate(x + TILE_SIZE / 2, y + TILE_SIZE / 2);
+  if (state.cat.facing === -1) ctx.scale(-1, 1);
+
+  // Body
+  ctx.fillStyle = '#ff9f43';
+  ctx.beginPath();
+  ctx.arc(0, 5, 18, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Head
+  ctx.beginPath();
+  ctx.arc(0, -6, 16, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Ears
+  ctx.fillStyle = '#ee5253';
+  ctx.beginPath();
+  ctx.moveTo(-12, -18); ctx.lineTo(-6, -26); ctx.lineTo(-2, -18); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(12, -18); ctx.lineTo(6, -26); ctx.lineTo(2, -18); ctx.fill();
+
+  // Helmet (Kuning Miner)
+  ctx.fillStyle = '#feca57';
+  ctx.beginPath();
+  ctx.arc(0, -12, 17, Math.PI, 0);
+  ctx.fill();
+  ctx.fillRect(-18, -14, 36, 4);
+
+  // Helmet Lamp
+  ctx.fillStyle = '#fff200';
+  ctx.shadowColor = '#fff200';
+  ctx.shadowBlur = 10;
+  ctx.beginPath();
+  ctx.arc(0, -16, 4, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+
+  // Eyes
+  ctx.fillStyle = '#222';
+  ctx.beginPath();
+  ctx.arc(6, -6, 2.5, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Pickaxe (Beliung Penambang)
+  ctx.fillStyle = '#8395a7';
+  ctx.beginPath();
+  ctx.arc(14, 2, 8, Math.PI * 1.2, Math.PI * 1.8);
+  ctx.lineWidth = 4;
+  ctx.strokeStyle = '#54a0ff';
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+function drawBlock(type, x, y) {
+  const px = x * TILE_SIZE;
+  const py = y * TILE_SIZE;
+
+  if (type === BLOCK.DIRT) {
+    ctx.fillStyle = '#5c3d2e';
+    ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
+    ctx.fillStyle = '#4a2f22';
+    ctx.fillRect(px + 4, py + 4, TILE_SIZE - 8, TILE_SIZE - 8);
+  } else if (type === BLOCK.ROCK) {
+    ctx.fillStyle = '#3d3d3d';
+    ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
+    ctx.fillStyle = '#2b2b2b';
+    ctx.beginPath();
+    ctx.arc(px + TILE_SIZE/2, py + TILE_SIZE/2, 18, 0, Math.PI * 2);
+    ctx.fill();
+  } else if (type >= BLOCK.GEM_RUBY) {
+    ctx.fillStyle = '#2e1e1e';
+    ctx.fillRect(px, py, TILE_SIZE, TILE_SIZE);
+
+    let gemColor = type === BLOCK.GEM_RUBY ? '#ff2a6d' : (type === BLOCK.GEM_EMERALD ? '#05ffa1' : '#00f0ff');
+    ctx.fillStyle = gemColor;
+    ctx.shadowColor = gemColor;
+    ctx.shadowBlur = 8;
+    ctx.beginPath();
+    ctx.moveTo(px + TILE_SIZE/2, py + 12);
+    ctx.lineTo(px + TILE_SIZE - 12, py + TILE_SIZE/2);
+    ctx.lineTo(px + TILE_SIZE/2, py + TILE_SIZE - 12);
+    ctx.lineTo(px + 12, py + TILE_SIZE/2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.shadowBlur = 0;
+  }
+}
+
+function update() {
+  if (state.gameOver) return;
+
+  // Pengurangan Energi Seiring Waktu
+  state.energy -= 0.03;
+  if (state.energy <= 0) {
+    state.energy = 0;
+    state.gameOver = true;
+  }
+
+  // Particle Update
+  for (let i = state.particles.length - 1; i >= 0; i--) {
+    let p = state.particles[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    p.life -= 0.04;
+    if (p.life <= 0) state.particles.splice(i, 1);
+  }
+}
+
+function render() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  // Camera Offset untuk scrolling ke bawah
+  let cameraY = Math.max(0, (state.cat.y - 3) * TILE_SIZE);
+  ctx.save();
+  ctx.translate(0, -cameraY);
+
+  // Render Grid
+  for (let r = 0; r < state.grid.length; r++) {
+    for (let c = 0; c < COLS; c++) {
+      drawBlock(state.grid[r][c], c, r);
+    }
+  }
+
+  // Render Cat
+  drawCat(state.cat.x * TILE_SIZE, state.cat.y * TILE_SIZE);
+
+  // Render Particles
+  state.particles.forEach(p => {
+    ctx.fillStyle = p.color;
+    ctx.globalAlpha = p.life;
+    ctx.fillRect(p.x, p.y, p.size, p.size);
+    ctx.globalAlpha = 1;
+  });
+
+  ctx.restore();
+
+  // Render UI (Fixed Screen Header)
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+  ctx.fillRect(0, 0, canvas.width, 50);
+
+  ctx.fillStyle = '#fff';
+  ctx.font = 'bold 16px sans-serif';
+  ctx.fillText(`SCORE: ${state.score}`, 16, 30);
+  ctx.fillText(`DEPTH: ${state.depth}m`, 160, 30);
+
+  // Energy Bar
+  ctx.fillText(`ENERGY:`, 300, 30);
+  ctx.fillStyle = '#333';
+  ctx.fillRect(380, 16, 80, 16);
+  ctx.fillStyle = state.energy > 30 ? '#05ffa1' : '#ff2a6d';
+  ctx.fillRect(380, 16, (state.energy / 100) * 80, 16);
+
+  // Game Over Screen
+  if (state.gameOver) {
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = '#ff2a6d';
+    ctx.font = 'bold 36px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2 - 20);
+
+    ctx.fillStyle = '#fff';
+    ctx.font = '18px sans-serif';
+    ctx.fillText(`Skor Akhir: ${state.score} | Kedalaman: ${state.depth}m`, canvas.width / 2, canvas.height / 2 + 20);
+    ctx.fillText('Tekan [SPACE] atau [R] untuk Main Lagi', canvas.width / 2, canvas.height / 2 + 60);
+    ctx.textAlign = 'left';
+  }
+}
+
+function loop() {
+  update();
+  render();
+  requestAnimationFrame(loop);
+}
+
+resetGame();
+loop();
+</script>
+</body>
+</html>
